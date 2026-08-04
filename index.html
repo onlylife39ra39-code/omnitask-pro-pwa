@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="ja" class="h-full dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>OmniTask Pro - ToDo & Calendar Sync</title>
+  <meta name="theme-color" content="#0f172a">
+  <meta name="description" content="モダンなToDo管理・カレンダー同期・アラーム機能付きPWAアプリ">
+  <link rel="manifest" href="manifest.json">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: { 50: '#eef2ff', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca' }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-full flex flex-col font-sans antialiased pb-28">
+
+  <!-- Top Header -->
+  <header class="sticky top-0 z-30 backdrop-blur-md bg-slate-900/80 border-b border-slate-800 px-4 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-2">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold shadow-lg shadow-indigo-500/30">
+        <i class="fa-solid font-bold fa-check-double text-lg"></i>
+      </div>
+      <div>
+        <h1 class="font-bold text-lg leading-none tracking-tight">OmniTask <span class="text-xs text-indigo-400 font-normal px-1.5 py-0.5 rounded bg-indigo-950 border border-indigo-800/50">PRO</span></h1>
+        <p class="text-xs text-slate-400 mt-0.5" id="currentDateDisplay">Loading date...</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <button onclick="toggleGCalModal()" class="px-2.5 py-1.5 rounded-lg text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center gap-1.5 transition border border-slate-700">
+        <i class="fa-brands fa-google text-slate-400"></i>同期
+      </button>
+      <button onclick="toggleWidgetModal()" class="px-2.5 py-1.5 rounded-lg text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center gap-1.5 transition border border-slate-700">
+        <i class="fa-solid fa-shapes text-indigo-400"></i>ウィジェット
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Body Container (Tasks on Top) -->
+  <main class="flex-1 max-w-3xl w-full mx-auto px-4 pt-4 flex flex-col gap-4">
+    
+    <!-- Quick Stats & Filter Bar -->
+    <section class="space-y-3">
+      <!-- Stat Cards -->
+      <div class="grid grid-cols-3 gap-2.5">
+        <div class="bg-slate-800/60 border border-slate-700/60 rounded-xl p-3 flex flex-col">
+          <span class="text-xs text-slate-400 font-medium">未完了</span>
+          <span class="text-xl font-bold text-indigo-400 mt-1" id="pendingCount">0</span>
+        </div>
+        <div class="bg-slate-800/60 border border-slate-700/60 rounded-xl p-3 flex flex-col">
+          <span class="text-xs text-slate-400 font-medium">進行中</span>
+          <span class="text-xl font-bold text-amber-400 mt-1" id="inProgressCount">0</span>
+        </div>
+        <div class="bg-slate-800/60 border border-slate-700/60 rounded-xl p-3 flex flex-col">
+          <span class="text-xs text-slate-400 font-medium">完了</span>
+          <span class="text-xl font-bold text-emerald-400 mt-1" id="completedCount">0</span>
+        </div>
+      </div>
+
+      <!-- Filter Controls -->
+      <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+        <!-- Status Tabs -->
+        <div class="inline-flex p-1 bg-slate-800/80 rounded-xl text-xs font-medium border border-slate-700/50 space-x-1">
+          <button onclick="setStatusFilter('all')" id="btnFilterAll" class="px-3 py-1 rounded-lg transition bg-indigo-600 text-white shadow-sm">全て</button>
+          <button onclick="setStatusFilter('pending')" id="btnFilterPending" class="px-3 py-1 rounded-lg text-slate-400 hover:text-white transition">未完了</button>
+          <button onclick="setStatusFilter('in_progress')" id="btnFilterInProgress" class="px-3 py-1 rounded-lg text-slate-400 hover:text-white transition">進行中</button>
+          <button onclick="setStatusFilter('completed')" id="btnFilterCompleted" class="px-3 py-1 rounded-lg text-slate-400 hover:text-white transition">完了</button>
+        </div>
+
+        <!-- Priority Filter -->
+        <select id="priorityFilter" onchange="renderTasks()" class="bg-slate-800 text-xs text-slate-300 rounded-lg px-2.5 py-1.5 border border-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500">
+          <option value="all">優先度: 全て</option>
+          <option value="urgent">緊急</option>
+          <option value="high">高</option>
+          <option value="medium">中</option>
+          <option value="low">低</option>
+        </select>
+      </div>
+
+      <!-- Tag Chips Filter Container -->
+      <div id="tagFilterContainer" class="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
+        <!-- Injected via JS -->
+      </div>
+    </section>
+
+    <!-- Task List (TOP SECTION) -->
+    <section class="flex-1 flex flex-col space-y-2.5 mt-2">
+      <div class="flex items-center justify-between px-1">
+        <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+          <i class="fa-solid fa-list-check text-indigo-400"></i> タスク一覧
+        </h2>
+        <button onclick="clearCompletedTasks()" class="text-xs text-slate-500 hover:text-rose-400 transition flex items-center gap-1">
+          <i class="fa-regular fa-trash-can"></i> 完了済みを削除
+        </button>
+      </div>
+
+      <div id="taskList" class="space-y-2.5">
+        <!-- Dynamic Tasks Injected Here -->
+      </div>
+    </section>
+  </main>
+
+  <!-- FIXED BOTTOM REGISTRATION PANEL (登録は下に配置) -->
+  <div class="fixed bottom-0 inset-x-0 z-40 bg-slate-900/95 backdrop-blur-xl border-t border-slate-800 shadow-2xl p-3 sm:p-4">
+    <div class="max-w-3xl mx-auto space-y-2.5">
+      <form id="quickTaskForm" onsubmit="handleTaskSubmit(event)" class="space-y-2.5">
+        <!-- Primary Task Input Line -->
+        <div class="flex items-center gap-2">
+          <div class="relative flex-1">
+            <input type="text" id="taskTitle" required placeholder="新しいタスクを入力... (例: 14:00 打ち合わせ)" class="w-full bg-slate-800/90 text-sm text-slate-100 placeholder-slate-500 rounded-xl px-4 py-3 border border-slate-700/80 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 shadow-inner transition">
+            <button type="button" onclick="toggleMoreTaskOptions()" title="詳細設定" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-400 transition p-1">
+              <i id="moreOptionsIcon" class="fa-solid fa-sliders text-sm"></i>
+            </button>
+          </div>
+          <button type="submit" class="bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-medium text-sm px-5 py-3 rounded-xl shadow-lg shadow-indigo-600/30 flex items-center gap-1.5 transition shrink-0">
+            <i class="fa-solid fa-plus"></i> 登録
+          </button>
+        </div>
+
+        <!-- Expandable Advanced Options Container -->
+        <div id="expandedOptions" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-slate-800/80 animate-fadeIn">
+          <!-- Priority & Tags -->
+          <div class="flex gap-2">
+            <div class="w-1/2">
+              <label class="block text-[10px] uppercase font-bold text-slate-400 mb-1">優先度</label>
+              <select id="taskPriority" class="w-full bg-slate-800 text-xs text-slate-200 rounded-lg px-2.5 py-2 border border-slate-700 focus:outline-none focus:border-indigo-500">
+                <option value="low">低</option>
+                <option value="medium" selected>中</option>
+                <option value="high">高</option>
+                <option value="urgent">🚨 緊急</option>
+              </select>
+            </div>
+            <div class="w-1/2">
+              <label class="block text-[10px] uppercase font-bold text-slate-400 mb-1">タグ</label>
+              <input type="text" id="taskTag" placeholder="仕事, 個人" class="w-full bg-slate-800 text-xs text-slate-200 rounded-lg px-2.5 py-2 border border-slate-700 focus:outline-none focus:border-indigo-500">
+            </div>
+          </div>
+
+          <!-- Alarm Time & Repeat Rule -->
+          <div class="flex gap-2">
+            <div class="w-1/2">
+              <label class="block text-[10px] uppercase font-bold text-slate-400 mb-1">アラーム・期限</label>
+              <input type="datetime-local" id="taskAlarmTime" class="w-full bg-slate-800 text-xs text-slate-200 rounded-lg px-2 py-1.5 border border-slate-700 focus:outline-none focus:border-indigo-500">
+            </div>
+            <div class="w-1/2">
+              <label class="block text-[10px] uppercase font-bold text-slate-400 mb-1">繰り返し</label>
+              <select id="taskRepeat" class="w-full bg-slate-800 text-xs text-slate-200 rounded-lg px-2.5 py-2 border border-slate-700 focus:outline-none focus:border-indigo-500">
+                <option value="none">なし</option>
+                <option value="daily">毎日</option>
+                <option value="weekly">毎週</option>
+                <option value="monthly">毎月</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Google Calendar Sync Modal -->
+  <div id="gcalModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-md w-full shadow-2xl relative">
+      <button onclick="toggleGCalModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+      <h3 class="text-lg font-bold text-white flex items-center gap-2 mb-2">
+        <i class="fa-brands fa-google text-indigo-400"></i> Google カレンダー連携
+      </h3>
+      <p class="text-xs text-slate-400 mb-4">Google カレンダーと双方向連携または .ics 形式でエクスポートして同期できます。</p>
+      <div class="space-y-3">
+        <button onclick="syncWithGoogleCal()" class="w-full py-2.5 px-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition">
+          <i class="fa-brands fa-google text-indigo-400"></i> Google アカウントでログイン同期
+        </button>
+        <button onclick="exportToICS()" class="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition">
+          <i class="fa-solid fa-file-export"></i> 期限付きタスクを iCal (ics) で書き出し
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- iPhone Widget Preview Modal -->
+  <div id="widgetModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-md w-full shadow-2xl relative">
+      <button onclick="toggleWidgetModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+      <h3 class="text-lg font-bold text-white flex items-center gap-2 mb-1">
+        <i class="fa-solid fa-mobile-screen-button text-indigo-400"></i> iPhone ウィジェット設定
+      </h3>
+      <p class="text-xs text-slate-400 mb-4">ホーム画面にPWAを追加すると、以下のウィジェット表示およびクイック起動が可能になります。</p>
+      
+      <!-- iOS Widget Mock Representation -->
+      <div class="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 p-4 rounded-3xl shadow-xl space-y-3 mb-4">
+        <div class="flex items-center justify-between text-xs text-indigo-400 font-bold tracking-wider uppercase">
+          <span class="flex items-center gap-1.5"><i class="fa-solid fa-square-check"></i> OmniTask Widget</span>
+          <span class="text-[10px] text-slate-400" id="widgetClock">12:00</span>
+        </div>
+        <div class="space-y-1.5" id="widgetTaskPreview">
+          <!-- Mock preview tasks -->
+        </div>
+      </div>
+
+      <ol class="text-xs text-slate-300 space-y-1.5 list-decimal list-inside pl-1 bg-slate-800/50 p-3 rounded-xl border border-slate-800">
+        <li>Safariの共有ボタン <i class="fa-solid fa-share-from-square text-indigo-400"></i> をタップ</li>
+        <li>「ホーム画面に追加 <i class="fa-regular fa-square-plus text-indigo-400"></i>」を選択</li>
+        <li>ホーム画面からアプリ感覚で即座にアクセス！</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- Embedded JS Logic -->
+  <script src="app.js"></script>
+</body>
+</html>
